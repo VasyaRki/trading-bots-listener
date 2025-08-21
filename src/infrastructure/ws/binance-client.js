@@ -1,53 +1,81 @@
 import WebSocket from 'ws';
-import { CONSTANTS } from '../../shared/constants.js';
+import { ProcessWebSocketDataUseCase } from '../../application/use-cases/ProcessWebSocketDataUseCase.js';
 
-export const init = (publisher) => {
+export const init = (marketDataRepository, eventPublisher, normalizer) => {
   const WS_URL = 'wss://fstream.binance.com/ws/!markPrice@arr';
+  const processUseCase = new ProcessWebSocketDataUseCase(
+    marketDataRepository,
+    eventPublisher,
+    normalizer,
+  );
 
-  const priceUpdateChanel = CONSTANTS.PUBLISHER.CHANELS.PRICE_UPDATE;
-  const fundingRateUpdateChanel =
-    CONSTANTS.PUBLISHER.CHANELS.FUNDING_RATE_UPDATE;
+  let ws = null;
+  let reconnectInterval = null;
+  const RECONNECT_DELAY = 5000;
+  const MAX_RECONNECT_ATTEMPTS = 5;
+  let reconnectAttempts = 0;
 
   const createSocket = () => {
-    const ws = new WebSocket(WS_URL);
+    ws = new WebSocket(WS_URL);
 
     ws.on('open', () => {
-      console.log(`Subscribed to all pairs`);
+      console.log(`[BINANCE WS] Connected to all pairs stream`);
+      reconnectAttempts = 0;
     });
 
-    ws.on('message', (raw) => {
-      const priceUpdates = JSON.parse(raw);
+    ws.on('message', async (raw) => {
+      try {
+        const priceUpdates = JSON.parse(raw);
 
-      for (const priceUpdate of priceUpdates) {
-        if (priceUpdate) {
-          const { p, r, s } = priceUpdate;
+        for (const update of priceUpdates) {
+          if (update) {
+            const { p, r, s } = update;
 
-          if (p !== undefined)
-            publisher.publish(priceUpdateChanel, {
-              provider: 'binance',
-              symbol: s,
-              lastPrice: p,
-              timestamp: Date.now(),
-            });
+            if (p !== undefined) {
+              await processUseCase.processPrice('binance', s, {
+                price: p,
+                lastPrice: p,
+                timestamp: Date.now(),
+              });
+            }
 
-          if (r !== undefined)
-            publisher.publish(fundingRateUpdateChanel, {
-              provider: 'binance',
-              symbol: s,
-              fundingRate: r,
-              timestamp: Date.now(),
-            });
+            // if (r !== undefined) {
+            //   await processUseCase.processFundingRate('binance', s, {
+            //     fundingRate: r,
+            //     timestamp: Date.now(),
+            //   });
+            // }
+          }
         }
+      } catch (error) {
+        console.error('[BINANCE WS] Message processing error:', error);
       }
     });
 
     ws.on('error', (err) => {
-      console.error('WebSocket error:', err.message);
+      console.error('[BINANCE WS] WebSocket error:', err.message);
     });
 
-    ws.on('close', () => {
-      console.warn('WebSocket closed');
+    ws.on('close', (code, reason) => {
+      console.warn(`[BINANCE WS] WebSocket closed: ${code} ${reason}`);
+      attemptReconnect();
     });
+  };
+
+  const attemptReconnect = () => {
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.error('[BINANCE WS] Max reconnection attempts reached');
+      return;
+    }
+
+    reconnectAttempts++;
+    console.log(
+      `[BINANCE WS] Attempting to reconnect (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`,
+    );
+
+    reconnectInterval = setTimeout(() => {
+      createSocket();
+    }, RECONNECT_DELAY);
   };
 
   return {
@@ -55,7 +83,16 @@ export const init = (publisher) => {
       try {
         createSocket();
       } catch (err) {
-        console.error('Error during init:', err);
+        console.error('[BINANCE WS] Error during init:', err);
+      }
+    },
+
+    stop: async () => {
+      if (reconnectInterval) {
+        clearTimeout(reconnectInterval);
+      }
+      if (ws) {
+        ws.close();
       }
     },
   };

@@ -11,8 +11,12 @@ export const RedisKeyBuilder = {
     return `${prefix}:${provider}:${symbol}`;
   },
 
-  buildPriceSnapshotKey(symbol, provider) {
+  buildPriceHistoryKey(symbol, provider) {
     const prefix = CONSTANTS.REDIS.PRICE_HISTORY;
     return `${prefix}:${provider}:${symbol}`;
+  },
+
+  buildFundingRateHistoryKey(symbol, provider) {
+    return `funding-rate-history:${provider}:${symbol}`;
   },
 };

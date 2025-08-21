@@ -1,0 +1,66 @@
+export class OpenInterest {
+  constructor(symbol, value, timestamp, provider) {
+    if (!symbol) {
+      throw new Error('Symbol is required');
+    }
+    if (value === null || value === undefined || isNaN(value)) {
+      throw new Error('Value must be a valid number');
+    }
+    if (!timestamp || !Number.isInteger(timestamp)) {
+      throw new Error('Timestamp must be a valid integer');
+    }
+    if (!provider || typeof provider !== 'string') {
+      throw new Error('Provider must be a non-empty string');
+    }
+
+    this._symbol = symbol;
+    this._value = parseFloat(value);
+    this._timestamp = timestamp;
+    this._provider = provider.toLowerCase();
+  }
+
+  get symbol() {
+    return this._symbol;
+  }
+
+  get value() {
+    return this._value;
+  }
+
+  get timestamp() {
+    return this._timestamp;
+  }
+
+  get provider() {
+    return this._provider;
+  }
+
+  calculatePercentageChange(previousOI) {
+    if (!previousOI || !(previousOI instanceof OpenInterest)) {
+      throw new Error('Previous OpenInterest is required for comparison');
+    }
+
+    if (previousOI.value === 0) {
+      return this._value > 0 ? 100 : 0;
+    }
+
+    return ((this._value - previousOI.value) / previousOI.value) * 100;
+  }
+
+  equals(other) {
+    return other instanceof OpenInterest && 
+           this._symbol === other._symbol && 
+           this._value === other._value && 
+           this._timestamp === other._timestamp &&
+           this._provider === other._provider;
+  }
+
+  toJSON() {
+    return {
+      symbol: this._symbol,
+      value: this._value,
+      timestamp: this._timestamp,
+      provider: this._provider
+    };
+  }
+}

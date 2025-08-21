@@ -1,29 +1,25 @@
-import { RedisKeyBuilder } from '../../infrastructure/cache/key-builder.js';
-import { CONSTANTS } from '../../shared/constants.js';
+import { PollMarketDataUseCase } from '../use-cases/PollMarketDataUseCase.js';
 
-export const init = (provider, normalizer, redis) => {
+export const init = (
+  provider,
+  normalizer,
+  marketDataRepository,
+  eventPublisher,
+) => {
+  const useCase = new PollMarketDataUseCase(
+    provider,
+    marketDataRepository,
+    eventPublisher,
+    normalizer,
+  );
+
   return {
-    poll: async (symbols) => {
-      const promises = symbols.map(async (symbol) => {
-        try {
-          const rawData = await provider.getOpenInterest(symbol);
-          const normalized = await normalizer.normalizeOpenInterest({
-            provider: provider.type,
-            symbol,
-            data: rawData,
-          });
-          const key = RedisKeyBuilder.buildOpenInterestHistoryKey(
-            symbol,
-            provider.type,
-          );
-          await redis.lpushLimit(key, normalized);
-        } catch (err) {
-          console.error(`[BINANCE POLLER ERROR] Symbol: ${symbol}`, err);
-          return null;
-        }
-      });
-      await redis.publish(CONSTANTS.PUBLISHER.CHANELS.OI_UPDATE, provider.type);
-      await Promise.all(promises);
+    start: async () => {
+      const symbols = await provider.getSymbols();
+
+      setInterval(async () => {
+        await useCase.execute(symbols);
+      }, 60_000);
     },
   };
 };

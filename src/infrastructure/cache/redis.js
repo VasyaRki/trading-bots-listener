@@ -1,5 +1,6 @@
 export const init = (redis) => {
   return {
+    _redis: redis,
     zadd: async (key, ttl) => {
       const currentTimestamp = Math.floor(Date.now() / 1000);
 
